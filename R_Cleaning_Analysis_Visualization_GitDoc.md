@@ -553,7 +553,7 @@ Box_Plot = ggplot(data = DF_Cats,
 Box_Plot
 ```
 
-![](R_Cleaning_Analysis_Visualization_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
+![](R_Cleaning_Analysis_Visualization_GitDoc_files/figure-gfm/unnamed-chunk-23-1.png)<!-- -->
 
 Second we create a scatter plot of average weight by location and color,
 assigning it the name of “Scatter_Plot”
@@ -571,7 +571,7 @@ Scatter_Plot = ggplot(data = DF_Cats,
 Scatter_Plot
 ```
 
-![](R_Cleaning_Analysis_Visualization_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
+![](R_Cleaning_Analysis_Visualization_GitDoc_files/figure-gfm/unnamed-chunk-24-1.png)<!-- -->
 
 ### Using ggplot2 extensions plotly, patchwork, and ggforce to enhance graphs
 
@@ -588,7 +588,7 @@ and open it on a browser.
 ggplotly(Box_Plot)
 ```
 
-![](R_Cleaning_Analysis_Visualization_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
+![](R_Cleaning_Analysis_Visualization_GitDoc_files/figure-gfm/unnamed-chunk-25-1.png)<!-- -->
 
 **ggforce** enhances scatter plots by allowing you to highlight certain
 points, drawing an ellipse around points that adhere to a given filter.
@@ -606,7 +606,7 @@ Scatter_Plot = Scatter_Plot +
 Scatter_Plot
 ```
 
-![](R_Cleaning_Analysis_Visualization_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
+![](R_Cleaning_Analysis_Visualization_GitDoc_files/figure-gfm/unnamed-chunk-26-1.png)<!-- -->
 
 **patchwork** is great for letting you combined multiple plots into one
 and be able to visualize or save them as one image.
@@ -616,7 +616,7 @@ and be able to visualize or save them as one image.
 Box_Plot / Scatter_Plot
 ```
 
-![](R_Cleaning_Analysis_Visualization_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
+![](R_Cleaning_Analysis_Visualization_GitDoc_files/figure-gfm/unnamed-chunk-27-1.png)<!-- -->
 
 ## Mapping data using mapview
 
@@ -636,4 +636,4 @@ DF_Cats_Map <- st_as_sf(DF_Cats, coords = c("lon", "lat"),  crs = 4326)
 mapview(DF_Cats_Map, map.types ="CartoDB.Positron",label = DF_Cats_Map$name)
 ```
 
-![](R_Cleaning_Analysis_Visualization_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
+![](R_Cleaning_Analysis_Visualization_GitDoc_files/figure-gfm/unnamed-chunk-28-1.png)<!-- -->
