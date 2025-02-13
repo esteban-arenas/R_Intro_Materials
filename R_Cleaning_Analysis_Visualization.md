@@ -576,9 +576,12 @@ Scatter_Plot
 ### Using ggplot2 extensions plotly, patchwork, and ggforce to enhance graphs
 
 **plotly** has a lot of great features that make your graphics
-interactive. Below we’ll make our box plot interactive. Note that in a
-non HTML format, the map will be static. To view the interactive html
-version click here.
+interactive. Below we’ll make our box plot interactive.
+
+*Note:* that in a non HTML format, the plot will be static. To view the
+interactive html version download this
+[file](https://github.com/esteban-arenas/R_Intro_Materials/blob/main/R_Cleaning_Analysis_Visualization.html)
+and open it on a browser.
 
 ``` r
 # library(plotly)
@@ -618,9 +621,12 @@ Box_Plot / Scatter_Plot
 ## Mapping data using mapview
 
 If you have latitude and longitude coordinates in your data, you can map
-each entry as a point on a map and add whichever label you want. Note
-that in a non HTML format, the map will be static. To view the
-interactive html version click here.
+each entry as a point on a map and add whichever label you want.
+
+*Note:* that in a non HTML format, the map will be static. To view the
+interactive html version download this
+[file](https://github.com/esteban-arenas/R_Intro_Materials/blob/main/R_Cleaning_Analysis_Visualization.html)
+and open it on a browser.
 
 ``` r
 # library(sf)
