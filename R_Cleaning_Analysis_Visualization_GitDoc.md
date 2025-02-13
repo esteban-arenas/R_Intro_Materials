@@ -8,6 +8,10 @@ set and then going through various ways in which one can clean it,
 analyze the data, create some visualizations, and then create maps
 visualizations from lat and lon coordinates
 
+*Note:* In order for maps and tables to be interactive, open this walk
+through in an html format
+[here](https://0195004e-7f72-dc43-bd89-17a59e8f7c54.share.connect.posit.cloud/).
+
 We start by creating `DF_Cats`, a mock of what a raw data set might look
 like. Below we’ll go through some useful general steps in cleaning,
 analyzing and visualizing results using R.
@@ -578,10 +582,9 @@ Scatter_Plot
 **plotly** has a lot of great features that make your graphics
 interactive. Below we’ll make our box plot interactive.
 
-*Note:* that in a non HTML format, the plot will be static. To view the
-interactive html version download this
-[file](https://github.com/esteban-arenas/R_Intro_Materials/blob/main/R_Cleaning_Analysis_Visualization.html)
-and open it on a browser.
+*Note:* This plot is currently static. To view the interactive html
+version click
+[here](https://0195004e-7f72-dc43-bd89-17a59e8f7c54.share.connect.posit.cloud/).
 
 ``` r
 # library(plotly)
@@ -623,10 +626,9 @@ Box_Plot / Scatter_Plot
 If you have latitude and longitude coordinates in your data, you can map
 each entry as a point on a map and add whichever label you want.
 
-*Note:* that in a non HTML format, the map will be static. To view the
-interactive html version download this
-[file](https://github.com/esteban-arenas/R_Intro_Materials/blob/main/R_Cleaning_Analysis_Visualization.html)
-and open it on a browser.
+*Note:* This map is currently static. To view the interactive html
+version click
+[here](https://0195004e-7f72-dc43-bd89-17a59e8f7c54.share.connect.posit.cloud/).
 
 ``` r
 # library(sf)
