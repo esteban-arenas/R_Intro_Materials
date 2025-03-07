@@ -5,7 +5,9 @@ library(networkD3)
 library(dplyr)
 library(tidyr)
 
-combined_noduples <- read.csv("C:/Users/arenase/OneDrive - State of Michigan DTMB/Documents/R_Tmp/Code/Sankey_App/sample_sankey_data.csv", header=TRUE, stringsAsFactors=FALSE)
+df <- read.csv("C:/Users/arenase/OneDrive - State of Michigan DTMB/Documents/R_Intro_Materials/Sankey_App/sample_sankey_data.csv", header=TRUE, stringsAsFactors=FALSE)
+df <- df %>%
+  select(data_origin,division,section,program,end_user_final)
 
 ui <- fluidPage(
     selectInput(inputId = "slicer",
@@ -21,10 +23,6 @@ ui <- fluidPage(
 server <- function(input, output) {
 
 output$diagram <- renderSankeyNetwork({
-
-   df <- combined_noduples %>%
-        select(data_origin,division,section,program,end_user_final)
-
 
    rows <- (input$slicer == "All" | df$division == input$slicer) &
       (input$slicer2 == "All" | df$section == input$slicer2)
