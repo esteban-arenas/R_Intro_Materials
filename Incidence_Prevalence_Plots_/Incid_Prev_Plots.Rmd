@@ -1,0 +1,509 @@
+---
+author: "Esteban Arenas"
+date: "2026-02-03"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+```
+
+# Incidence and Prevalence
+
+This is an overview of some options for generating and customizing incidence and prevalence plots, helpful for understanding the dynamics of disease and making informed public health decisions.
+
+We mainly focus on the `incidence` and `ggplot2` packages, showing how to calculate different time period incidence counts and options on graphing and customizing results. But brief online examples of `surveil` (for fitting models to data) and `IncidencePrevalence` (estimating population level incidence and prevalence) are also given.
+
+
+## Incidence package 
+
+We'll start by loading the **Ebola outbreak in Sierra Leone, 2014** data set from the `outbreaks` package. `data(package = "outbreaks")` will show all data sets included in the outbreaks package.
+
+Then we will use the `incidence` package....Say something about the incidence package
+
+```{r, echo=TRUE}
+library(incidence)
+library(outbreaks)
+
+#First 10 rows of the 1861 Germany measles outbreak data set
+Ebola_SL = ebola_sierraleone_2014
+head(Ebola_SL)
+```
+
+### incidence() Function
+
+The `incidence()` function creates incidence list objects, calculating the incidence of different events across specified time periods and groupings. The only argument it requires is a vector of dates (date of onset in this case). If `interval=` is left blank, the default will be to calculate daily incidence. Numbers passed to `interval=` are interpreted as days. Text strings corresponding to weeks or other can also be passed to the argument.
+
+First we calculate weekly incidence and then plot using `plot()`. When calling `plot()` on an incidence object, the function `plot.incidence()` is implicitly used. For single series grey is used and colors from the color palette `incidence_pal1` when incidence is computed by groups.
+
+```{r, echo=TRUE}
+wk_inc = incidence(Ebola_SL$date_of_onset, interval=7)
+
+plot(wk_inc)
+```
+
+### Interval Options
+
+Below are options of what the text string inputs for `interval=` can be and we show how the plot labels can change when using the different options. 
+
+* integer of number of days: Interpreted as ISO weeks
+* day or daily
+* week(s) or weekly: ISO weeks. Start of week can be customized ex.`1 week: saturday`
+* epiweek(s): Start on Sunday
+* isoweek(s): Start on Monday
+* month(s) or monthly
+* yearmonth(s)
+* quarter(s) or quarterly
+* yearquarter(s)
+* year(s) or yearly
+
+*Notice how the y-axis label is "ISO weekly incidence" when using ISO weeks and "MMWR weekly incidence" when using epiweeks*
+
+```{r, echo=TRUE}
+wk_inc_epi = incidence(Ebola_SL$date_of_onset, interval="1 epiweek")
+
+plot(wk_inc_epi)
+```
+
+Now we calculate weekly incidence by groups, using our `district` variable. Then we plot again using `plot()` and pass a custom pallet through the `col_pal=` argument, as an example. 
+
+Click [here](https://sjspielman.github.io/introverse/articles/color_fill_scales.html) for more details on the `colorbrewer` package and different color pallet options.
+
+```{r, echo=TRUE}
+wk_inc_dist = incidence(Ebola_SL$date_of_onset, interval=7, groups=Ebola_SL$district)
+
+plot(wk_inc_dist, col_pal = heat.colors)
+
+#A manual color scale can also be provided using the `color` argument as in the code below
+#plot(wk_inc_dist, color = c("#ac3973", "#6666ff","purple3","white"....)) #must add colors equal to the number of groups
+
+#library(RColorBrewer)
+#colorbrewer pallets can also be used with the code below. More details in link above
+#plot(wk_inc_dist)+scale_fill_viridis_d(option="inferno")
+```
+
+### `as.incidence()` Converting incidence objects to data frames and back
+
+Below we turn the weekly incidence by districts incidence object, into a data frame with `as.data.frame()`. Data frames can be useful to more easily view and/or modify information in the incidence object.
+
+```{r, echo=TRUE}
+df_wk_inc_dist = as.data.frame(wk_inc_dist)
+
+head(df_wk_inc_dist)
+```
+
+Using `as.incidence()` we then turn the data frame back into an incidence object and check for it to be identical to our original `wk_inc_dist` incidence object.
+
+*Note: Remember to set `interval=` equal to the interval that was originally used to create the incidence object. In this case `7`*
+
+```{r, echo=TRUE}
+#Convert to a matrix and remove date columns, leaving only counts per group columns
+matrix_wk_inc_dist <- as.matrix(df_wk_inc_dist[, -c(1:3)])
+#Use as.incidence() to turn back into an incidence object
+new_wk_inc_dist = as.incidence(matrix_wk_inc_dist,dates = df_wk_inc_dist$dates, interval = 7)
+
+#Check that old and new incidence object are identical
+identical(wk_inc_dist,new_wk_inc_dist)
+```
+
+### Aggregated data with `as.incidence()`
+
+Now we'll use COVID 2020-2021 Michigan data from the CDC. Link to data [here](https://data.cdc.gov/Public-Health-Surveillance/Weekly-Rates-of-Laboratory-Confirmed-COVID-19-Hosp/6jg4-xsqq/about_data). This data comes aggregated by weekly incidence and using the `as.incidence()` function we can turn it into an incidence object.
+
+```{r, echo=TRUE}
+COVID_20_21 = read.csv("data/COVID_Hosp_20_21_3Age_Groups.csv")
+# Picking just Michigan state data
+COVID_20_21 = COVID_20_21[COVID_20_21$State=="MI",c(3,4,8)]
+head(COVID_20_21)
+```
+Notice that the weekly rate is numeric, allowing for fractions. This needs to be turned into an integer to prevent a disparity error in the length of dates and counts. Format must also be changed to wide for `as.incidence()` to work properly.
+
+```{r, echo=TRUE}
+#Rounding and converting counts data to integer
+COVID_20_21$Weekly.Rate = as.integer(round(COVID_20_21$Weekly.Rate,0))
+#Converting to wide format
+library(tidyr)
+COVID_20_21 <- pivot_wider(
+  data = COVID_20_21,
+  names_from = Age.Category,   # Column whose values become new column names
+  values_from = Weekly.Rate      # Column whose values fill the new columns
+)
+head(COVID_20_21)
+```
+
+The `as.incidence()` arguments we will use are:
+
+1. Matrix of counts, with time intervals in rows and groups in columns
+2. Dates vector corresponding to the row time intervals of the matrix 
+3. Interval to indicate the time interval used to calculate incidences (1 epiweek in this case)
+
+Once our data frame is turned into an incidence object, we will plot it again using `plot()`
+
+```{r, echo=TRUE}
+#Convert to a matrix and remove the date column
+Matrix_COVID_20_21 <- as.matrix(COVID_20_21[, -1])
+#Convert to an incidence object
+inc_COVID_20_21 = as.incidence(Matrix_COVID_20_21,dates = COVID_20_21$Week.ending.date, interval = "1 epiweek")
+#Plotting with incidence package
+plot(inc_COVID_20_21, border = "green") #example of how border colors can be added
+```
+
+Now we will turn our incidence object `inc_COVID_20_21` back into a data frame to show that the data remains the same
+
+Notice that the only difference is that incidence adds a weeks column and sets the date as the beginning of the week instead of the end of week (which is what we had in the original data).
+
+```{r, echo=TRUE}
+new_COVID_20_21 = as.data.frame(inc_COVID_20_21)
+
+head(new_COVID_20_21)
+```
+## ggplot2 customizing Incidence plots 
+
+Using `ggplot2`, many arguments can be added to the `plot()` function with `+` to customize incidence plots. In this section we will show the use of:
+
+- `scale_x_date()` : controlling how date values on the x-axis are displayed
+- `labs()`: sets labels for titles and other plot components
+- `theme()` : enables customization of plot aesthetics 
+- `subset()` : Extracting and displaying specific date ranges of the data
+
+
+### scale_x_date()
+
+We first show the use of `scale_x_date()` and options for the `breaks=` and `labels=` arguments. Notice how the x-axis date label changes from epiweeks (ex. "2021-W40") to the specified date format (ex. "03 Oct 2021"). More on date and time R format codes [here](https://stat.ethz.ch/R-manual/R-devel/library/base/html/strptime.html)
+
+```{r, echo=TRUE}
+library(ggplot2)
+
+#make_breaks() calculates breaks for the plot, which match brakes used by plot() from the incidence package. These are epiweeks, here labeled as the Sunday beginning of the week
+breaks=make_breaks(inc_COVID_20_21)
+
+plot(inc_COVID_20_21) +
+   scale_x_date(breaks= breaks$breaks, #we use the "$breaks" element from the "breaks" list
+                date_labels="%d %b %Y") #Here we specify in what date format the breaks will be labeled
+
+```
+
+### labs() and theme()
+
+`labs()` (`title=` for the plot title and `fill=` for the legend title) is used to add titles.
+
+`theme()` modifies aesthetics. The `axis.text.x=` argument is used to change the format of dates text on the x-axis, `legend` arguments modify the legend, and the `plot.title=` argument modifies aesthetics of the plot title. A list of many other aesthetic modifications that can be done with theme, can be found [here](https://ggplot2.tidyverse.org/reference/theme.html).
+
+```{r, echo=TRUE}
+plot(inc_COVID_20_21) +
+   scale_x_date(breaks= breaks$breaks,
+                date_labels="%d %b %Y") +
+  labs(title="COVID incidense in Michigan State",fill="Age Groups")+ #plot and legend title
+  theme(axis.text.x = element_text(angle = 90, hjust = 1), #modifies x axis text
+          legend.position = "bottom", legend.direction = "horizontal", #modifies legend
+        plot.title=element_text(size=16,face="bold",color="purple")) #modifies plot title
+
+```
+
+### subset()
+
+With `subset()` we can extract data for specific date ranges of interest and display a zoomed in group of that weekly incidence. 
+
+```{r, echo=TRUE}
+sub_inc_COVID_20_21 = subset(inc_COVID_20_21, from=as.Date("2021-10-03"), to=as.Date("2021-12-05")) #provide the date ranges to extract
+sub_breaks= make_breaks(sub_inc_COVID_20_21, n_breaks=nrow(sub_inc_COVID_20_21)) #Calculate new bin breaks for new subset of data. In this case we choose to have a label for every bin.
+
+plot(sub_inc_COVID_20_21, border="black") + #black border added. "show_cases=TRUE" argument can also be added when there are few cases that you want individually outlined
+   scale_x_date(breaks= sub_breaks$breaks,
+                date_labels="%d %b %Y") +
+  labs(title="COVID incidense in Michigan State",fill="Age Groups")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+          legend.position = "bottom", legend.direction = "horizontal",
+        plot.title=element_text(size=16,face="bold",color="purple"))
+
+```
+
+## Making incidence plots with just ggplot2 
+
+`ggplot2` allows for more flexibility and customization in building incidence and prevalence plots, but requires more code and understanding of all the individual components of a ggplot plot. Incidence must be manually aggregated and x-axis dates need to be adjusted as desired and so they align with bins. 
+
+
+### Non-aggregated data
+
+Recall the weekly incidence by districts we calculated previously, using the **Ebola outbreak in Sierra Leone, 2014** data set:
+
+```{r, echo=TRUE}
+wk_inc_dist = incidence(Ebola_SL$date_of_onset, interval=7, groups=Ebola_SL$district)
+
+plot(wk_inc_dist, col_pal = heat.colors)
+```
+
+The data looks like this:
+
+```{r, echo=TRUE}
+head(Ebola_SL)
+```
+Below we'll use the non-aggregated data set of **Ebola outbreak in Sierra Leone, 2014** and replicate the graph above, but this time using ggplot2 exclusively.
+
+Note that breaks must be defined for histogram bins (using the `breaks=` argument within `geom_histogram()`) and for gridline positions (using the `breaks=` argument within `scale_x_date()`). If using weeks as breaks, be sure to set the start of the week as desired.
+
+```{r, echo=TRUE}
+library(lubridate)
+# Breaks sequence must be defined to calculate iso weekly incidence
+wk_breaks <- seq.Date(
+# Monday before first case
+from = floor_date(min(Ebola_SL$date_of_onset, na.rm=T),"week",week_start = 1),
+# Monday after last case
+to=ceiling_date(max(Ebola_SL$date_of_onset, na.rm=T), "week", week_start = 1),
+# bins are 7-days each
+by   = "week")
+
+#Graphing
+ggplot(data = Ebola_SL) +
+#date column mapped to x-axis
+geom_histogram(mapping = aes(x = date_of_onset,
+#grouped by district
+fill=district),
+#count cases from start of breakpoint bars. Next Monday is counted in the next break. Current Monday in this break
+closed = "left",
+#histogram defined breaks to aggregate by iso weekly incidence
+breaks = wk_breaks)+
+#fill palette color for the districts grouping
+scale_fill_manual(values=heat.colors(14))+
+#Major Gridline breaks. Use same as "wk_breaks", but separated "by" desired gap in major gridlines
+scale_x_date(breaks = seq.Date(from=floor_date(min(Ebola_SL$date_of_onset, na.rm=T),"week",week_start =1),to=ceiling_date(max(Ebola_SL$date_of_onset, na.rm=T),"week", week_start = 1),by="13 weeks"),
+#labels for major gridlines. In ISO week format
+date_labels="%Y-W%V")+
+#y, x and legend titles
+labs(y= "ISO weekly incidence",x=element_blank(),fill="groups")
+```
+
+### Aggregated data
+
+Here we will go back to using our weekly incidence aggregated COVID 2020-2021 Michigan data from the CDC and will replicate the incidence created plot using ggplot2 exclusively.
+
+Below is what the incidence plot looks like
+```{r, echo=TRUE}
+plot(inc_COVID_20_21, border = "green") #example of how border colors can be added
+```
+
+This is the same data used to generate the plot above. We will import and prepare it from scratch to then graph solely using ggplot.
+
+```{r, echo=TRUE}
+COVID_20_21 = read.csv("data/COVID_Hosp_20_21_3Age_Groups.csv")
+# Picking just Michigan state data
+COVID_20_21 = COVID_20_21[COVID_20_21$State=="MI",c(3,4,8)]
+#Rounding and converting counts data to integer
+COVID_20_21$Weekly.Rate = as.integer(round(COVID_20_21$Weekly.Rate,0))
+#Coverting to date class
+COVID_20_21$Week.ending.date = as.Date(COVID_20_21$Week.ending.date)
+#Getting epi week start date to match graph above. wday() treats the week as starting on Sunday by default
+COVID_20_21$wk_start = COVID_20_21$Week.ending.date-(wday(COVID_20_21$Week.ending.date)-1)
+#unaggregating data by adding copies of each row corresponding to its "Weekly.Rate" column. Explained why this is done below in Note: section
+COVID_20_21 = COVID_20_21[rep(seq_len(nrow(COVID_20_21)), COVID_20_21$Weekly.Rate), ]
+
+#Sample of data
+head(COVID_20_21)
+```
+The main difference when using aggregated data is the use of the `y=` (defining the counts column) and `stat="identity"` (specifying that bar height should be the `y=` value and not the number of rows as is the default) arguments within `histogram()`.
+
+*Note: I found it difficult in ggplot to align gridlines with the start of bins when using aggregated data. Bins are treated as factors with a gridline in their center identifying them, instead the x-axis being continuous time on which the bins are placed. A workaround was to unaggregate the data as done in data prepping above. The line of code to graph aggregated data is commented out below. Feel free to use it if that result is what you're looking for.*
+
+```{r, echo=TRUE}
+ggplot(COVID_20_21) + 
+#geom_histogram() with the line below is used for aggregated data. Be sure to change data source above to the aggregated data ex.ggplot(Aggregated_Data)
+# geom_histogram(mapping=aes(x=wk_start,y=Weekly.Rate,fill=Age.Category),stat="identity",color="green",
+geom_histogram(mapping=aes(x=wk_start,fill=Age.Category),color="green",
+breaks=seq.Date(from=floor_date(min(COVID_20_21$wk_start, na.rm=T),"week", week_start = 7), to=ceiling_date(max(COVID_20_21$wk_start, na.rm=T),"week", week_start = 7), by="7 days"),
+#Minor breaks can also be added
+# minor_breaks = seq.Date(from=floor_date(min(COVID_20_21$wk_start, na.rm=T),"week",week_start=7),to=ceiling_date(max(COVID_20_21$wk_start, na.rm=T),"week",week_start=7),by="7 days"),
+closed="left")+
+scale_x_date(breaks = seq.Date(from=floor_date(min(COVID_20_21$wk_start, na.rm=T),"week",week_start =7),to=ceiling_date(max(COVID_20_21$wk_start, na.rm=T),"week", week_start = 7),by="9 weeks"), date_labels="%Y-W%U")+
+scale_fill_manual(values=incidence_pal1_light(3))+ #one of the default palettes used by incidence when plotting
+labs(x=element_blank(),y="MMWR weekly incidence",fill="groups")
+```
+
+### Facetted Plots
+
+One other useful thing that can quickly be done with ggplot by adding the `facet_wrap()` function to an existing graph. This allows you to have multiply small graphs for each individual category used to group the data. Furthermore, we add `gghighlight()` from the `gghighlight` package to show the total epidemic in the background of each facet.
+
+```{r, echo=TRUE}
+# install.packages("gghighlight")
+library(gghighlight)
+
+#Creating facet labels
+facet_labels = as_labeller(c("≥75 years"="75 or over","1-4 years"="Ages 1-4","30-39 years"="Ages 30-39"))
+
+ggplot(COVID_20_21) + 
+geom_histogram(mapping=aes(x=wk_start,fill=Age.Category),color="black",
+breaks=seq.Date(from=floor_date(min(COVID_20_21$wk_start, na.rm=T),"week", week_start = 7), to=ceiling_date(max(COVID_20_21$wk_start, na.rm=T),"week", week_start = 7), by="7 days"),
+closed="left")+
+scale_x_date(breaks = seq.Date(from=floor_date(min(COVID_20_21$wk_start, na.rm=T),"week",week_start =7),to=ceiling_date(max(COVID_20_21$wk_start, na.rm=T),"week", week_start = 7),by="9 weeks"), date_labels="%Y-W%U")+
+scale_fill_manual(values=incidence_pal1_light(3))+
+labs(x=element_blank(),y="MMWR weekly incidence",fill="groups") +
+
+#Highlight for total epidemic in the background
+gghighlight::gghighlight()+
+#Add column group to display after "~". Number of columns and rows can be specified, strip position, etc.
+facet_wrap(~Age.Category,strip.position="top",nrow=1,ncol=3,labeller=facet_labels)+
+theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+## Surveil Package
+
+Surveil is designed for routine time trend analysis such as disease incidence rates or mortality rates. The primary function in surveil is the `stan_rw()` function, which has the option of fitting the Poisson or the Binomial models to surveillance data.
+
+The package also contains special methods for age-standardization, printing and plotting model results, and for measuring and visualizing health inequalities. You can also view functions of risk estimates, such as cumulative percent change.
+
+Below is a quick summary of the package as shown online. More examples and vignettes on the package can be found [here](https://connordonegan.github.io/surveil/).
+
+We will be using Texas Metropolitan Statistical Areas (MSA) colorectal cancer incidence data by ethnicity, year and ages.
+
+```{r, echo=TRUE}
+library(surveil)
+
+#View sample data in surveil package
+head(msa)
+```
+To analyze incidence by race over time, we combine MSA and aggregate the data. This means adding incidence (`Count`) and population (`Population`) numbers by year and race.
+
+```{r, echo=TRUE}
+msa2 <- aggregate(cbind(Count, Population) ~ Year + Race, data = msa, FUN = sum)
+
+head(msa2)
+```
+### stan_rw() - Fitting the Model
+
+`stan_rw()` expects a data frame with one column names `Count` (containing case counts) and another column named `Population` (containing the sizes of the populations at risk). User provides the name of the column containing the time period and, optionally, a grouping factor can be provided.  
+
+Below the Poisson model is used and fit to the data using `stan_rw()`. `iter=1e3` controls how long the sampling continues for with the defualt being 3,000.
+
+Results can be printed and they are also stored in a summary data frame, showing estimates with 95% credible intervals.
+
+```{r, echo=TRUE}
+fit <- stan_rw(msa2, time = Year, group = Race, iter = 1e3)
+head(fit$summary)
+```
+Using `ggplot`, `plot()` will visualize estimates for the three ethnicities with their corresponding 95% intervals. Crude incident rates are plotted as points and `scale=100e3` displays rates per 100,000.
+
+```{r, echo=TRUE}
+plot(fit, scale=100e3)
+```
+
+### apc() - Percent Change
+
+`apc()` calculates percent change by period and cumulatively over time. The object returned contains two data frames. One is contains estimates of percent change from the previous period and the other contains estimates of cumulative percent change since the first observed period.
+
+```{r, echo=TRUE}
+fit_pc <- apc(fit)
+
+head(fit_pc$cpc)
+#head(fit_pc$apc) #This plot the first data frame with percent changes by period
+```
+Again, using `ggplot` through `plot()`, we  plot `cpc` results. This is an estimate of the difference in incidence rates between that year and the first year, expressed as a percent of the first year's rate. We also see the lower and upper bounds of the 95% credible intervals for the estimates.
+
+```{r, echo=TRUE}
+plot(fit_pc, cumulative=TRUE)
+```
+
+### ggplot and customizing surveil graphs 
+
+The surveil `plot()` function includes some arguments that can be used to customize the graphs. But using `ggplot2`, many arguments can be added to the `plot()` function with `+` to customize the graphs as well. This is just like we did with the plots from the `incidence` package.
+
+`base_size=` controls the size of labels. `style="lines` samples from the join probability distribution for the estimates. The `scale=` can be changed from rates per 100,000
+
+```{r, echo=TRUE}
+#These are all changes within the `plot` function
+plot(fit,scale=100e3,base_size=20,style="lines")+
+
+#All ggplot additions with "+"
+labs(title="CRC per 100,00 incidence",x="Years")+ #plot title and x-axis label
+theme(axis.text.x = element_text(angle = 90), #modifies x axis text
+axis.title= element_text(face="italic",size=10,color="red"), #modifies x-axis label
+plot.title=element_text(size=16,face="bold",color="purple")) #modifies plot title
+```
+
+
+## IncidencePrevalence Package
+
+This package contains functions for estimating population-level incidence and prevalence using the OMOP common data model and denominator and outcome cohorts. Below is a summary of the package as shown online. Information that I found and for citations, click [here](https://darwin-eu.github.io/IncidencePrevalence/).
+
+It is designed to work with data in the OMOP CDM format, so we will create a reference to and use data from the `CDMConnector` package
+
+```{r, echo=TRUE}
+# install.packages("IncidencePrevalence")
+library(CDMConnector)
+library(IncidencePrevalence)
+
+#loading data
+cdm <- mockIncidencePrevalence(
+  sampleSize = 10000,
+  outPre = 0.3,
+  minOutcomeDays = 365,
+  maxOutcomeDays = 3650
+)
+
+head(cdm)
+```
+### Identifying Denominator Cohort
+
+```{r, echo=TRUE}
+#We identify a denominator cohort
+#We get 6 denominator cohorts in the OMOP CDM structure
+cdm <- generateDenominatorCohortSet(
+  cdm = cdm,
+  name = "denominator",
+  cohortDateRange = as.Date(c("2008-01-01", "2018-01-01")),
+  ageGroup = list(
+    c(0, 64),
+    c(65, 100)
+  ),
+  sex = c("Male", "Female", "Both"),
+  daysPriorObservation = 180
+)
+
+head(cdm$denominator)
+```
+### Outcome Cohort
+
+Mock data already has an outcome cohort that has been identified
+
+
+```{r, echo=TRUE}
+head(cdm$outcome)
+```
+### Estimating Incidence
+
+```{r, echo=TRUE}
+inc <- estimateIncidence(
+  cdm = cdm,
+  denominatorTable = "denominator",
+  outcomeTable = "outcome",
+  interval = "years",
+  repeatedEvents = TRUE,
+  outcomeWashout = 180,
+  completeDatabaseIntervals = TRUE
+)
+plotIncidence(inc, facet = c("denominator_age_group", "denominator_sex"))
+```
+
+### Estimating Point Prevalence
+
+```{r, echo=TRUE}
+prev_point <- estimatePointPrevalence(
+  cdm = cdm,
+  denominatorTable = "denominator",
+  outcomeTable = "outcome",
+  interval = "years",
+  timePoint = "start"
+)
+plotPrevalence(prev_point, facet = c("denominator_age_group", "denominator_sex"))
+```
+
+### Estimating Period Prevalence
+
+```{r, echo=TRUE}
+prev_point <- estimatePointPrevalence(
+  cdm = cdm,
+  denominatorTable = "denominator",
+  outcomeTable = "outcome",
+  interval = "years",
+  timePoint = "start"
+)
+plotPrevalence(prev_point, facet = c("denominator_age_group", "denominator_sex"))
+```
