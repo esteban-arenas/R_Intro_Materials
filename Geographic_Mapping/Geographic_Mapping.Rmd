@@ -1,0 +1,935 @@
+---
+title: "R Walk through on Geographic Mapping"
+author: "Esteban Arenas"
+date: "2025-04-22"
+output: 
+  html_document:
+    toc: true # table of content true
+    toc_depth: 3  # upto three depths of headings (specified by #, ## and ###)
+    number_sections: true  ## if you want number sections at each table header
+    theme: united  # many options for theme, this one is my favorite.
+    highlight: tango  # specifies the syntax highlighting style
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning=FALSE, message=FALSE)
+```
+
+#Introduction
+
+This walk through will focus on geospatial analysis, the analysis of geographical data. In order to visualize this data, different packages can be used in R. We will also go over how to integrate different types of vector data, creating disease distribution maps at different geographic scales, looking at static and interactive options with their corresponding base map options, and specific tools or add ons that can be incorporated into the maps.
+
+#ggplot2 - Static
+
+We'll start using `ggplot2` to create simple US state and county level maps and will then see how to overlay data to the map.
+
+First we load the `tidyverse` suite of packages to access included basic map data at the state and county levels. We then load the state and county level data.
+
+```{r, echo=TRUE}
+library(tidyverse)
+theme_set(theme_bw(base_size=16))
+
+us_states <- map_data("state") #US states data
+us_counties <- map_data("county") #US counties data
+
+head(us_states) #visualize first few rows of the US states data
+```
+
+##Basic maps
+
+Note that the data contains **lat**, **lon**, and **group** columns. When mapping these coordinates must be specified in the correct group order in order for states and counties to be geographically mapped correctly. So in order to plot, we must first specify the aesthetics with longitude and latitude as x and y. We also specify group arguments to visualize state level information.
+
+```{r, echo=TRUE}
+p <- ggplot(data = us_states,
+            mapping = aes(x = long, y = lat,group=group))
+```
+
+Once the aesthetics for the map are set up, we need to add a geometry for how we want our data displayed on the map. So we use `geom_polygon()` to add a polygon of the US states with the already specified aesthetics.
+
+```{r, echo=TRUE}
+p + geom_polygon()
+```
+However, by default we get a map with all states filled with a given color. We thus have to specify fill and outline colors. Specifying this will gives us a legend with all state names and so we also add `guides()` to remove the legends. To not have the map be slightly distorted, we add the commonly used "albers" projection with `coord_map()`. And finally, to remove axes and panel background we use `theme()`.
+
+```{r, echo=TRUE}
+p + geom_polygon(color="black", aes(fill=factor(region))) + guides(fill=FALSE) +
+      coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+    theme(axis.line=element_blank(),
+              axis.text=element_blank(),
+              axis.ticks=element_blank(),
+              axis.title=element_blank(),
+        panel.background=element_blank(),
+              panel.border=element_blank(),
+              panel.grid=element_blank())
+
+#TIP: Notice color="black" for the states outline is specified outside of aes() while fill=factor(region) is within aes().
+
+#Inside of aes() is used to specify by what object/variable of your data should the color groups be determined (in this case the different states through the region variable treated as factors). Thus our region/states factor variable is assigned to an aesthetic (fill of the polygons/states. All as different colors because they are factors). With fill="green" or fill="something else", all states would be colored the same color (most likely not green) because we'd simple be specifying values of fill to all be constant.
+
+#Outside of aes() we are setting an aesthetic (the outline of the polygons/states) to a constant value (black)
+```
+##Adding data
+
+Now that we have the map of the US states looking how we want it to, we can overlay data of interest on it. We will use 1999-2021 state cancer incidence data from [CDC WONDER](https://wonder.cdc.gov/controller/datarequest/D198;jsessionid=9630BD2699DB44E0F7CF1DA822B9). Data has been downloaded and will imported as a csv. We will then filter to cancer incidence pertaining only to the white population, change to lowercase all state names (so we match and can be joined to our states geographic data), and finally make our mapping variable (Crude.Rate) a numeric variable called *Incidence_Count* that can be displayed.
+
+```{r, echo=TRUE}
+Cancer_States_DB = read.csv("data/United_States_and_Puerto_Rico_Cancer_Statistics_1999_2021_Incidence.csv")
+
+Cancer_States_DB_Map = Cancer_States_DB %>% 
+    filter(Race =="White") %>%
+    mutate(States=tolower(States)) %>% 
+    mutate(Incidence_Count = as.numeric(Crude.Rate))
+
+head(Cancer_States_DB_Map)
+```
+
+Through the use of `left_join()` and linking them by *"region"="States"*, we can now combine or cancer incidence data `Cancer_States_DB_Map` with our geographic US sates data `us_states` and use the same ggplot2 mapping code as above to create a US states map displaying cancer incidence count.
+
+```{r, echo=TRUE}
+us_states = us_states %>% 
+  left_join(Cancer_States_DB_Map, by=c("region"="States"))
+
+
+us_states %>% 
+  # ggplot(data = us_states,mapping = aes(x = long, y = lat,group=group))+
+  # geom_polygon(color="white", aes(fill=as.numeric(Incidence_Count))) +
+  # scale_fill_continuous(type = "viridis",name="Incidence_Count")+
+  ggplot(data = us_states,mapping = aes(x =long,y=lat,group=group,fill=Incidence_Count))+
+  geom_polygon(color="white") + #guides(fill=FALSE) is removed to leave a legend
+  scale_fill_continuous(type = "viridis")+ #Can be changed to other color ramps
+  coord_map(projection = "albers", lat0 = 39, lat1 = 45) +
+  theme(axis.line=element_blank(),
+              axis.text=element_blank(),
+              axis.ticks=element_blank(),
+              axis.title=element_blank(),
+        panel.background=element_blank(),
+              panel.border=element_blank(),
+              panel.grid=element_blank())+
+  ggtitle("Cancer Incidence Count per 100,000") #Can add the title of your choice
+
+#TIP: The 3 lines of code above commented out can replace the first three of the code to get the same results. I left them to show that the "fill" aesthetic can be specified within ggplot() or within geom_polygon(). scale_fill_continuous() can also be used to modify aspects of the legend.
+```
+##Adding data with geom_sf()
+
+Now we'll look at adding different types of data. Let's say you want to add your own polygon, point, and fill data. In this example we'll be using **polygon** Michigan county data in a *Shapefile* format from [Michigan GIS Open Data](https://gis-michigan.opendata.arcgis.com/datasets/8fc9c089c11a4913b0768381fa07bf6d_0/explore?location=44.675559%2C-86.310775%2C6.46), **point** Substance use Disorder Facilities data also from [Michigan GIS Open Data](https://gis-michigan.opendata.arcgis.com/datasets/da8c64b11d1c410b9f975fb5c6d09e5a_7/explore?location=44.568325%2C-86.311000%2C6.61), and **fill** income inequality data from [County Health Ranking and Roadmaps](https://www.countyhealthrankings.org/health-data/michigan?year=2025&measure=Income+Inequality&tab=1).
+
+We'll be using `geom_sf()` as a different approach to mapping. This function is very useful when you have different layers of data that you'd like to add separately to a map. `geom_sf()` allows us to visualize simple feature (sf) objects by automatically detecting their geometry (such as points, lines or polygons) and drawing them on a map accordingly.
+
+```{r, echo=TRUE}
+#Income Inequality Data
+Income_Ineq = read.csv("data/michigan-2025-income-inequality-place-sort.csv")
+Income_Ineq = Income_Ineq[-1,] #Removing first row corresponding to state wide data since we are interested in county data only
+
+#Substance Use Disorder Facilities Data
+Sub_Use = read.csv("data/Substance_Use_Disorder_Care.csv")
+library(sf)
+SF_Sub_Use = st_as_sf(Sub_Use,coords=c('X','Y'), crs = 4326) #Covert df to an sf object
+
+#Michigan counties data - Shapefile
+shp_counties <- st_read("data/county_shapefile/County.shp")
+
+#Joining fill income inequality data with .shp MI county polygon data
+  Ineq_counties_SF = shp_counties %>% 
+    left_join(Income_Ineq, by=c("Name"="County"))
+
+#Mapping
+ggplot()+
+theme_void() +
+geom_sf(Ineq_counties_SF, mapping = aes(fill=County.Value..,color="A"))+ #Mapping fill inequality and polygon MI county data
+scale_fill_viridis_c(option="inferno",name="Legend #1 - Inequality value")+ #Color aesthetic for continuous fill inequality data
+geom_sf(SF_Sub_Use,size=.8,mapping=aes(color="B"))+ #Mapping point substance use data
+scale_color_manual(name="Legend #2",values=c("B"="green","A"="black"),
+                     labels=c("A"="Counties","B"="Substance use Disorder Facilities"))+ #Color aesthetics for discrete point substance use data and polygon county data
+labs(title = "Times high income households are greater than low ones - 2025")+ #Plot title
+guides(color = guide_legend(override.aes = list(fill = NA)))#remove fill for counties legend
+
+#TIP: For legends and aesthetics, note that separate legends will be created whenever different aesthetics (in this case "fill" vs "color") are mapped to different variables (continuous inequality data vs discrete substance use point  and polygon outline data). There ends up being one legend for "fill" and one for "color" (outline).
+  
+#One legend will be created if multiple aesthetics are mapped to the same variable or if the same aesthetic is mapped to multiple variables (in this case color is mapped for both the county lines and substance use points and both end up in the same legend). Aesthetics for data layers and legend customizing in this case are done through scale_fill_viridis_c() and scale_color_manual().
+```
+Below we'll add one more data set from the Michigan Substance Use Vulnerability Index, using the [`misuvi`](https://brendensm.r-universe.dev/misuvi) package developed by Brenden Smith. We'll be working with the variable `no_hs`: percent of individuals with no high school diploma per MI county.
+
+We use slightly different ways to map legend values and titles and provide different options for coloring map elements. There are different options depending on if the data is:
+
+- Continuous and sequential (from low to high color)
+- Continuous and diverging (from low to mid and then to high color)
+- Discrete
+
+Click [here](https://sjspielman.github.io/introverse/articles/color_fill_scales.html) for more details
+
+```{r, echo=TRUE}
+#Download MI-SUVI data: Michigan Substance Use Vulnerability Index
+# install.packages("misuvi", repos = c('https://brendensm.r-universe.dev', 'https://cloud.r-project.org'))
+# #
+library(misuvi)
+
+MI_SUVI = misuvi_load(geography = "county", type = "metrics", moe = "FALSE")
+
+#Creating sf data frame with fill data
+  No_HS_SF = shp_counties %>% 
+    left_join(MI_SUVI, by=c("Name"="county"))
+
+ggplot()+
+theme_void() +
+geom_sf(No_HS_SF, mapping = aes(fill=no_hs,color="Counties"))+ #Mapping fill no high school and polygon MI county data
+###Continuous scales options (no_hs fill data)
+scale_fill_distiller(palette = "YlGn")+ #colorbrewer palette
+# scale_fill_viridis_c(option="name of palette")+ #viridis palette
+# scale_fill_gradient(low = 'low color', high = 'high color') #sequential gradient custom palette
+# scale_fill_gradient2((low = 'low color', high = 'high color', mid = 'mid color', midpoint = 'number') #diverging gradient custom palette
+geom_sf(SF_Sub_Use, size=.8,mapping=aes(color="Substance use Disorder Facilities"))+ #Mapping point substance use data
+###Discrete palette options (point substance and polygon county data)
+scale_color_brewer(palette="Set1")+ #colorbrewer palette
+# scale_color_viridis_d(option = 'name of palette') #viridis palette
+# scale_color_manual(values = c('array', 'of', 'colors', 'to', 'use')) #custom colors
+labs(title = "Percent of individuals with no high school diploma - 2025",
+fill = "Legend #1 - Percent",color="Legend #2")+ #Plot and legend titles
+guides(color = guide_legend(override.aes = list(fill = NA)))#remove fill for counties legend
+
+  
+#TIP: Notice we get similar results to the example above, but in slightly different ways. 
+# - The name for the legend values is specified directly in the geom_sf() function.
+# - Legend titles can be specified with labs()
+# - color  brewer palettes are used and alternatives are provided
+```
+##Background Maps with ggspatial
+
+Below we show how we can add a background map to any of the ggplot2 maps we created above. Here we use all the code for the immediately preceding no high school diploma map and use the `annotation_map_tile()` function from the `ggspatial` package to add a background map.
+
+```{r, echo=TRUE}
+library(ggspatial)
+
+  ggplot()+
+  theme_void() +
+  annotation_map_tile(type="cartodark",zoom=7) + #Just add this line for a background map
+  geom_sf(No_HS_SF, mapping = aes(fill=no_hs,color="Counties"))+
+  scale_fill_distiller(palette = "YlGn")+
+  geom_sf(SF_Sub_Use, size=.8,mapping=aes(color="Substance use Disorder Facilities"))+
+  scale_color_brewer(palette="Set1")+
+  labs(title = "Percent of individuals with no high school diploma - 2025",
+  fill = "Legend #1 - Percent",color="Legend #2")+
+  guides(color = guide_legend(override.aes = list(fill = NA)))
+```
+
+Below we'll remove all data except MI counties with no fill, in order to more clearly show all the basemap options provided by `annotation_map_tile()`. All options available can be printed using the command `rosm::osm.types()`. Stamen map options now require an API key and can be used through `ggmap()`. Examples further below.
+
+Also note that a `.kml` instead of a `.shp` file is used. shape files may have more information (like county names) that allow for fill or other data to be joined to their polygon or other geometry features. However, if no joining will be done, kml files are another option that works well for displaying geometry features on a map.
+
+```{r, echo=TRUE}
+counties = "data/Counties_Michigan.kml" #Michigan counties kml file
+kml_counties <- st_read(counties) #read as an sf data frame
+
+#rosm::osm.types() will give you the annotation_map_tile() type options below. stamenbwand stamenwatercolor are excluded because they can now be mapped with ggmap() and an API key.
+
+maptype <- c("osm", "opencycle", "hotstyle", "loviniahike",
+            "loviniacycle","osmtransport", "thunderforestlandscape","thunderforestoutdoors",
+            "cartodark","cartolight")
+mylist <- vector("list", length(maptype)) #creating a list of map types in order to display them all at once
+
+num <- 0
+for(i in (1:length(maptype))){
+  num <- num+1
+  p = ggplot()+
+  annotation_map_tile(type=maptype[i])+ #looping through base maps
+  geom_sf(kml_counties, mapping = aes(), color="red",fill=NA)+ #Using .kml instead of .shp
+  theme_void()+
+  labs(title=maptype[i]) + 
+  theme(plot.title=element_text(color="black", size = 6))#assigning the name of the base map as the title
+
+  mylist[[num]] <- p
+}
+
+library(patchwork)
+patchwork::wrap_plots(mylist) #using patchwork to combine different ggplot objects into one single graphic
+```
+##Background Maps with maptiles
+
+Here we show another method for adding a background map to a ggplot2 map. We'll be using the `get_tiles` function from the `maptiles` package and again displaying the background map on the no high school diploma map.
+
+Some of the basemap options can be found [here](https://leaflet-extras.github.io/leaflet-providers/preview/). However, several (like the Stadia maps) require an API key. A list of some of the free ones is provided below.
+
+```{r, echo=TRUE}
+# Define the bounding box for the map, in this case based on our MI counties
+bbox <- st_bbox(kml_counties)
+
+library(maptiles)
+# Fetch the map tiles
+map_tiles <- get_tiles(bbox, zoom = 7, provider = "Esri.WorldImagery") #Alter provider for different base maps
+#Below is a list of some of the free maps that can be substituted in the provider field within get_tiles() above
+#Esri, OpenStreetMap, and CartoDB tiles
+# Maps = c("Esri.WorldStreetMap","Esri.WorldTopoMap","Esri.WorldImagery", "Esri.WorldTerrain", "Esri.WorldShadedRelief", "Esri.OceanBasemap", "Esri.NatGeoWorldMap", "Esri.WorldGrayCanvas", "OpenStreetMap", "OpenStreetMap.DE", "OpenStreetMap.France", "OpenStreetMap.HOT", "OpenTopoMap","CartoDB.DarkMatter", "CartoDB.Voyager")
+
+library(tidyterra) #needed for the geom_spatraster_rgb() function
+
+ggplot()+
+theme_void() +
+geom_spatraster_rgb(data = map_tiles)+ #Used to visualize raster objects and images
+geom_sf(No_HS_SF, mapping = aes(fill=no_hs,color="Counties"))+
+scale_fill_distiller(palette = "YlGn")+
+geom_sf(SF_Sub_Use, size=.8,mapping=aes(color="Substance use Disorder Facilities"))+
+scale_color_brewer(palette="Set1")+
+labs(title = "Percent of individuals with no high school diploma - 2025",
+fill = "Legend #1 - Percent",color="Legend #2")+
+guides(color = guide_legend(override.aes = list(fill = NA)))
+```
+##Background Maps with ggmap
+
+The `ggmap` package lets us retrieve raster map tiles from online mapping services like *Google Maps* and *Stadia Maps*. We can then use ggplot2 framework to plot them and add geom data and features.
+
+Both Stadia and Google require API keys to use their maps and Google also requires a billing enablement. Both offer a number of free calls before billing starts.
+
+A google API can be set up following these [instructions](https://search.r-project.org/CRAN/refmans/ggmap/html/register_google.html) and then using the command `register_google(key = "SET YOUR KEY HERE")`
+
+A stadia API can be set up following these [instructions](https://rdrr.io/github/dkahle/ggmap/man/register_stadiamaps.html) and then using the command `register_stadiamaps(key = "SET YOUR KEY HERE")`. I completed this process in order to be able to show you a stadia map with the `get_stadiamap()` function below. Stadia map options can be visualized [here](https://leaflet-extras.github.io/leaflet-providers/preview/) as well.
+
+```{r, echo=TRUE}
+library(ggmap)
+
+map <- get_stadiamap(bbox = c(left = -90.8, bottom = 41.4, right = -81.8, top = 48.5), zoom = 7, maptype = "stamen_watercolor") #retrieve stadia map by defining a bounding box, zoom, and maptype.
+
+#Maptype stadia options below
+# maptype_stadia <- c("stamen_terrain", "stamen_toner", "stamen_toner_lite", "stamen_watercolor",
+#             "alidade_smooth", "alidade_smooth_dark", "outdoors",
+#             "stamen_terrain_background",
+#             "stamen_toner_background","stamen_terrain_labels","stamen_terrain_lines",
+#             "stamen_toner_labels","stamen_toner_lines")
+ggmap(map)
+```
+Before adding data to the map, let's note that we've been working with data in a **sf** (simple features) format. Spatial data can also be used as **data.frame** and **sp** (spatial data) objects. Below we'll see some challenges of working with **sf** data in `ggmap` and then go through another example using **data.frame** data.
+
+- **sf**: (simple features) objects keep a geometry column with coordinates and specifying the 'type' of geometry for every row, given that every row has the potential to be a different geometry (polygon, point, lines, etc.)
+
+- **sp**: (spatial data) can be objects of class *SpatialPolygonsDataFrame*, *SpatialPointsDataFrame*, *SpatialPixelsDataFrame*, *SpatialLinesDataFrame*, etc. Each object can only hold data of the same class/geometry. Furthermore, these objects have *lat* and *long* fields instead of a *geometry* field for their coordinates. However, **sp** is being phased out in favor of **sf** so we won't be using this data.
+
+- **data.frame**: These are a common data structure in R that can be thought of as lists of vectors that can contain different types of variables and data classes, similar to an excel spreadsheet. They do not contain a crs (coordinate reference system).
+
+**sf** data below
+
+```{r, echo=TRUE}
+#We will read all data again for our example:
+
+#Michigan counties data - Shapefile read in as a sf
+shp_counties <- st_read("data/county_shapefile/County.shp")
+
+#Download MI-SUVI data: Michigan Substance Use Vulnerability Index
+MI_SUVI = misuvi_load(geography = "county", type = "metrics", moe = "FALSE")
+
+#Creating sf data frame with fill data
+  No_HS_SF = shp_counties %>% 
+    left_join(MI_SUVI, by=c("Name"="county"))
+
+head(No_HS_SF,3)
+```
+Notice this **sf** "shp_counties" MI counties object has a CRS and a geometry field with coordinates, specifying the geometry type (multipolygon in this case).
+
+Because our bounding box from the ggmap object we created above (water color `map`) is in WGS84 (EPSG:4326) crs, but the raster that we'll use to add spatial data is in a EPSG:3857 crs, we have to change the crs of the bounding box to be in the same crs as the underlying data. Otherwise, our data will not be aligned with the map underneath. The function below helps us do that. This is a complication of `ggmap` when mapping with **sf** data.
+
+```{r, echo=TRUE}
+# Define a function to fix the bbox to be in EPSG:3857
+ggmap_bbox <- function(map) {
+  if (!inherits(map, "ggmap")) stop("map must be a ggmap object")
+  # Extract the bounding box (in lat/lon) from the ggmap to a numeric vector, 
+  # and set the names to what sf::st_bbox expects:
+  map_bbox <- setNames(unlist(attr(map, "bb")), 
+                       c("ymin", "xmin", "ymax", "xmax"))
+
+  # Coonvert the bbox to an sf polygon, transform it to 3857, 
+  # and convert back to a bbox (convoluted, but it works)
+  bbox_3857 <- st_bbox(st_transform(st_as_sfc(st_bbox(map_bbox, crs = 4326)), 3857))
+
+  # Overwrite the bbox of the ggmap object with the transformed coordinates 
+  attr(map, "bb")$ll.lat <- bbox_3857["ymin"]
+  attr(map, "bb")$ll.lon <- bbox_3857["xmin"]
+  attr(map, "bb")$ur.lat <- bbox_3857["ymax"]
+  attr(map, "bb")$ur.lon <- bbox_3857["xmax"]
+  map
+}
+
+map_sf =ggmap_bbox(map) #Use the function to change the bbox of our original map to EPSG:3857
+```
+We also need to transform the crs of our **sf** data to be the same as that of our base map bbox and raster using `st_transform()`.
+
+And lastly, the default `ggmap` aesthetic is to use lat and long column specified coordinates from **data.frame** or **sp** objects. When using **sf** data we need to add `inherit.aes = FALSE` to all `geom_sf()` layers. This will ensure the parent `ggmap` plot aesthetic is not adopted when reading `geom_sf()` and the **geometry** column aesthetic will thus be used to map the data.
+
+With the exception of the things listed above, we use the same code to map our data and add a `ggmap` base map.
+
+```{r, echo=TRUE}
+No_HS_SF_CRS <- st_transform(No_HS_SF, crs = 3857) #CRS 3857 for data to match map CRS
+
+ggmap(map_sf)+
+theme_void() +
+geom_sf(No_HS_SF_CRS, mapping = aes(fill=no_hs,color="Counties"),inherit.aes = FALSE)+ #inherit.aes = FALSE used to ensure "geometry is used to map the layer"
+scale_fill_distiller(palette = "YlGn")+
+geom_sf(SF_Sub_Use, size=.8,mapping=aes(color="Substance use Disorder Facilities"),inherit.aes = FALSE)+ #inherit.aes = FALSE used to ensure "geometry is used to map the layer"
+scale_color_brewer(palette="Set1")+
+labs(title = "Percent of individuals with no high school diploma - 2025",
+fill = "Legend #1 - Percent",color="Legend #2")+
+guides(color = guide_legend(override.aes = list(fill = NA)))
+```
+Now we will use data of class **data.frame** to map onto the same `ggmap` base map.
+
+We will read a `.geojson` file of Michigan counties as an **sp** object, join the MI_SUVI data, and then convert it to a **data.frame**.
+
+```{r, echo=TRUE}
+library(geojsonio)
+geoj_counties <- geojson_read("data/County.geojson",what="sp") #read .geojson as an sp object
+
+library(plyr) #for using the join() function
+geoj_counties@data$id <- rownames(geoj_counties@data) #adding id to sp file to be able to join MI_SUVI data after using fortify() to convert it to a "data.frame" (other join fields will be lost)
+MI_SUVI_tmp = MI_SUVI
+colnames(MI_SUVI_tmp)[2]="Name" #Changing column name to match "geoj_counties" and be able to join
+geoj_counties@data   <- join(geoj_counties@data, MI_SUVI_tmp, by="Name") #Adding all MI_SUVI data to MI counties "geoj_counties" sp object
+geoj_counties_df     <- fortify(geoj_counties) #transform sp object "geoj_counties" to a data.frame with lat and long columns
+geoj_counties_df     <- join(geoj_counties_df,geoj_counties@data, by="id") #Use "id" field, preserved in "geoj_counties_df" to match and add all "MI_SUVI" data present in "geoj_counties"
+
+head(geoj_counties_df)
+```
+Now that we have our data in a **data.frame** class, we will use the `ggplot2` functions `geom_polygon()` and `geom_point()` to add our counties  and substance use disorder facilities data to the `ggmap` base map.
+
+Note that because our data is in a **data.frame** class, it does not contain a crs. It therefore gets plotted directly onto the `ggmap` bbox crs and no transformation is needed to ensure all data is aligned. Furthermore, both `geom_polygon()` and `geom_point()` by default operate with the same **lat** and **long** aesthetics as the parent `ggmap` plot and thus `inherit.aes = FALSE` is not necessary.
+
+```{r, echo=TRUE}
+map <- get_stadiamap(bbox = c(left = -90.8, bottom = 41.4, right = -81.8, top = 48.5), zoom = 7, maptype = "stamen_watercolor") #retrieve stadia map by defining a bounding box, zoom, and maptype.
+
+Sub_Use = read.csv("data/Substance_Use_Disorder_Care.csv") #Reading in point data as "data.frame"
+
+ggmap(map) +
+theme_void()+
+geom_polygon(geoj_counties_df,mapping=aes(x=long,y=lat,group=group,color="Counties",fill=no_hs))+
+scale_fill_distiller(palette = "YlGn")+
+geom_point(data=Sub_Use,aes(x=X,y=Y,color="Substance use Disorder Facilities"),size=.8)+
+scale_color_brewer(palette="Set1")+
+labs(title = "Percent of individuals with no high school diploma - 2025",
+fill = "Legend #1 - Percent",color="Legend #2")+
+guides(color = guide_legend(override.aes = list(fill = NA)))
+```
+##Maps with ggplotly - Interactive
+
+The `plotly` package lets you create a variety of interactive graphics. `plotly` graphics can be created by either:
+
+- Initializing a graphic directly in plotly with functions such as `plot_ly()`, `plot_geo()`, `plot_mapbox()`, etc.
+
+- Transforming a ggplot2 existing graphic, via `ggplotly()`, into a plotly graphic
+
+Below we'll show how simple it can be to transform an existing ggplot map through `ggplotly()`. However, you'll notice that custom aesthetics or geometries that do not return a standard ggplot2 object, are not translated properly to our plotly graphic. `layout()` and other functions can be used to modify components of the plotly object. You can find more information on the two ways of creating plotly maps [here](https://linking.plotly-r.com/maps).
+
+```{r, echo=TRUE}
+#We use the same code of our map above and save it as the object "ggplotly_map"
+ggplotly_map = ggmap(map) +
+theme_void()+
+geom_polygon(geoj_counties_df,mapping=aes(x=long,y=lat,group=group,color="Counties",fill=no_hs))+
+scale_fill_distiller(palette = "YlGn")+
+geom_point(data=Sub_Use,aes(x=X,y=Y,color="Substance use Disorder Facilities"),size=.8)+
+scale_color_brewer(palette="Set1")+
+labs(title = "Percent of individuals with no high school diploma - 2025",
+fill = "Legend #1 - Percent",color="Legend #2")+
+guides(color = guide_legend(override.aes = list(fill = NA)))
+
+library(plotly)
+#The saved map object "ggplotly_map" is then passed to the "ggplotly()" function and our map becomes interactive.
+ggplotly(ggplotly_map)
+```
+#Leaflet - Interactive
+
+`Leaflet` is an easy to use and flexible package for creating some really good dynamic and interactive maps. The function `leaflet()` is always called, followed by different `add*()` layers that are tagged on with the pipe `%>%` operator. 
+
+```{r, echo=TRUE}
+library(sf)
+library(leaflet)
+
+leaflet() %>% #leaflet() called followed by the pipe operator (%>%)
+addTiles() #add the default Open Street basemap
+```
+##Adding base maps
+
+Instead of the `addTiles()` function, we can use `addProviderTiles()`. This gives you access to a list named `providers`. We can pass this list as an input to the `addProviderTiles()` function to get a variety of different base maps.The different bas emap themes are available [here](https://leaflet-extras.github.io/leaflet-providers/preview/)
+
+```{r, echo=TRUE}
+leaflet() %>%
+addProviderTiles(providers$NASAGIBS.ViirsEarthAtNight2012, group = "NASA Viirs") #NASA Viirs base map
+# addProviderTiles(providers$CartoDB.Positron, group = "CartoDB Positron") #CartoDB.Positron base map additional example
+```
+##Adding data
+
+Now we'll look at adding different types of data. Let's say you want to add your own polygon, point, and fill data. In this example we'll be using **polygon** Michigan county data in a *Shapefile* format from [Michigan GIS Open Data](https://gis-michigan.opendata.arcgis.com/datasets/8fc9c089c11a4913b0768381fa07bf6d_0/explore?location=44.675559%2C-86.310775%2C6.46), **point** Substance use Disorder Facilities data also from [Michigan GIS Open Data](https://gis-michigan.opendata.arcgis.com/datasets/da8c64b11d1c410b9f975fb5c6d09e5a_7/explore?location=44.568325%2C-86.311000%2C6.61), and **fill** income inequality data from [County Health Ranking and Roadmaps](https://www.countyhealthrankings.org/health-data/michigan?year=2025&measure=Income+Inequality&tab=1).
+
+All our data will be read as **sf** objects:
+
+- **sf**: (simple features) objects keep a geometry column with coordinates and specifying the 'type' of geometry for every row, given that every row has the potential to be a different geometry (polygon, point, lines, etc.)
+
+```{r, echo=TRUE}
+Sub_Use = read.csv("data/Substance_Use_Disorder_Care.csv") #Our points data
+SF_Sub_Use = st_as_sf(Sub_Use,coords=c('X','Y')) #Covert df to an sf object
+
+#Michigan counties data - Shapefile read in as a sf
+shp_counties <- st_read("data/county_shapefile/County.shp")
+
+#Income Inequality Data
+Income_Ineq = read.csv("data/michigan-2025-income-inequality-place-sort.csv")
+Income_Ineq = Income_Ineq[-1,] #Removing first row corresponding to state wide data since we are interested in county data only
+
+#Joining fill income inequality data with .shp MI county polygon data
+Ineq_counties_SF = shp_counties %>% 
+left_join(Income_Ineq, by=c("Name"="County"))
+Ineq_counties_SF <- st_transform(Ineq_counties_SF, crs = '+proj=longlat +datum=WGS84')
+
+head(Ineq_counties_SF)
+```
+
+Once we have our **sf** data objects, they are easy to overlay on our leaflet map. This is done using `addPolygons()`for polygons and a variety of options for points, including `addMarkers()` and `addCircleMarkers()`. Initial view will set to your data unless otherwise specified with `setView()`
+
+Notice for:
+
+- `addPolygons()`: *weight* controls the thickness of the lines or borders, *opacity* controls transparency level for the outline, *fillOpacity* controls transparency level for the fills, and *label* designates a label that appears on hover (county names will appear on hover)
+
+- `addCircleMarkers()`: circles are made smaller than default with *radius*, the default outline is removed with *stroke*, and default fill opacity is removed with *fillOpacity*. *popup* designates a label that will appear upon clicking of the marker (Substance use Disorder Facility names will appear when markers are clicked).
+
+- `addMarkers()`: default leaflet marker icon that will show boat names on hover.
+
+```{r, echo=TRUE}
+#Mapping
+leaflet() %>%
+  
+addProviderTiles(providers$CartoDB.Positron, group = "CartoDB Positron") %>% #We'll use a CartoDB.Positron base map to make our data more visible
+  
+#Our MI counties file
+addPolygons(data = Ineq_counties_SF, color = "red",weight = 1, opacity = 1,
+              fillOpacity = 0,label=~Name)%>% #label: Text appears on hover
+
+#Substance Use Disorder Program points data
+addCircleMarkers(data = SF_Sub_Use, color = "blue",radius=3,stroke=FALSE,
+                     fillOpacity = 1,popup=~Name)%>% #popup: text appears when clicked
+
+#Boats manually added coordinates and labels
+addMarkers(data=data.frame(lng = c(-82.77, -82.48), lat = c(44.97, 44.27)),
+           label=c("Boat 1","Boat 2"))
+
+#TIP: "~column_name" can be used instead of "data$column_name" if data has already been specified within the function
+```
+
+##Adding legends
+
+To add our legends we will use `addLegend()` and `addLegendImage()` from the `leaflegend` package. `addLegend()` will be used to a a legend for our discrete data of polygon *counties* and point *Substance Use Disorder facilities*. We will use `addLegendImage()` creates a legend with web images that are embedded into the leaflet map and we'll use it to add an image of the leaflet default marker for our legend of the two boats.
+
+Furthermore, we are adding the `addLayersControl()` function to allow the user to select and unselect the boats layer. Upon checking its box in the upper right corner, this layer will appear and disappear along with its legend. The parameter **group** is added to the `addMarkers()` function, assigning the data layer a name that can later be referred to with `addLayersControl()`.
+
+Note for:
+
+- `addLegend()`: **pal** is a color palette for your legend and it can be generated with `colorFactor()`,`colorNumeric()`,`colorBin()`, or `colorQuantile()`, depending on the data being displayed. Colors can be set manually or obtained from existing palettes found [here](https://sjspielman.github.io/introverse/articles/color_fill_scales.html). The **domain** or **levels** parameters indicate the possible data values that can be mapped with this palette.
+
+- `addLegendImage()`: Since this is the legend of our `addMarkers()` boats data layer, we will link them by assigning them the same **group** ("Boats"). Uses *html* syntax for modifying text.
+
+```{r, echo=TRUE}
+# install.packages("leaflegend")
+library(leaflegend) #Needed for addLegendImage()
+
+#addLegend() color palette for "counties" (addPolygons() layer) and "Substance Use Disorder facilities" (addCircleMarkers() layer). Data that can be mapped is the constant columns Ineq_counties_SF$Type = "County" and SF_Sub_Use$FacilityType = "Substance Use Disorder Program"
+pal = colorFactor(c("red","blue"), domain = c(Ineq_counties_SF$Type,SF_Sub_Use$FacilityType))
+
+leaflet() %>%
+addProviderTiles(providers$CartoDB.Positron, group = "CartoDB Positron") %>%
+addPolygons(data = Ineq_counties_SF, color = "red",weight = 1, opacity = 1,fillOpacity=0, label=~Name)%>%
+addCircleMarkers(data = SF_Sub_Use, color = "blue",radius=3,stroke=FALSE,fillOpacity = 1,popup=~Name)%>%
+addMarkers(data=data.frame(lng = c(-82.77, -82.48), lat = c(44.97, 44.27)),group="Boats",label=c("Boat 1","Boat 2"))%>% #adding [group="Boats"] parameter
+
+#Legend for addPolygons() and addCircleMarkers()
+addLegend(position="bottomleft",pal=pal,values=c(Ineq_counties_SF$Type,SF_Sub_Use$FacilityType),title="Legend #1",opacity=1) %>% #pal defined above. values is data that will be displayed on the legend
+
+#The addLegend() code below can replace the one above to get the same result. "color" and "labels" can be used for manually setting parameters and "pal" and "values" can be used for basing info on data and color scales
+# addLegend(position="bottomleft",color=c("red","blue"),labels=c("County","Substance Use Disorder Program"),title="Legend #1",opacity=1) %>% 
+
+addLegendImage(
+images = "https://www.pngall.com/wp-content/uploads/2017/05/Map-Marker-PNG-Pic.png", # URL to your legend image
+labels = "Boats", #legend text
+width = 15, height = 15, # Adjust the size of the image
+position = "bottomleft",
+labelStyle = "font-size:13px",#modify legend text
+title = htmltools::tags$div('Legend #2',style='font-size:15px;text-align:left;font-weight:bold'), #modify title text
+group="Boats" #same group as addMarkers()
+) %>% 
+
+#defining "Boats" group. Using menu in top right, layer can be toggled on and off
+addLayersControl(overlayGroups = c("Boats"),position = "topright")
+```
+
+Now let's fill our county polygons with income inequality data. We'll use `colorNumeric()` to generate the continuous ("RdPu") color palette **pal2**. Passed as a **fillColor** parameter within our `addPolygons()` function, **pal2** colors the  *County.Value..* variable to fill our MI county polygons.
+
+A new legend is also added for this continuous income inequality variable
+
+```{r, echo=TRUE}
+pal = colorFactor(c("red","blue"), domain = c(Ineq_counties_SF$Type,SF_Sub_Use$FacilityType))
+pal2 = colorNumeric("RdPu",domain=Ineq_counties_SF$County.Value..) #pal for fillColor in addPolygons()
+
+leaflet() %>%
+addProviderTiles(providers$CartoDB.Positron, group = "CartoDB Positron") %>%
+addPolygons(data = Ineq_counties_SF, color = "red",fillColor=~pal2(County.Value..),weight = 1, opacity = 1,fillOpacity=1, label=~Name)%>% #Added a fillColor
+addCircleMarkers(data = SF_Sub_Use, color = "blue",radius=3,stroke=FALSE, fillOpacity = 1,popup=~Name)%>%
+addMarkers(data=data.frame(lng = c(-82.77, -82.48), lat = c(44.97, 44.27)),group="Boats",label=c("Boat 1","Boat 2"))%>%
+addLegend(position="bottomleft",pal=pal,values=c(Ineq_counties_SF$Type,SF_Sub_Use$FacilityType),title="Legend #1",opacity=1) %>% #pal defined above. values is data that will be displayed on the legend
+addLegendImage(
+images = "https://www.pngall.com/wp-content/uploads/2017/05/Map-Marker-PNG-Pic.png", # URL to your legend image
+labels = "Boats", #legend text
+width = 15, height = 15, # Adjust the size of the image
+position = "bottomleft",
+labelStyle = "font-size:13px",#modify legend text
+title = htmltools::tags$div('Legend #2',style='font-size:15px;text-align:left;font-weight:bold'), #modify title text
+group="Boats" #same group as addMarkers()
+) %>% 
+addLayersControl(overlayGroups = c("Boats"),position = "topright") %>% 
+
+#New legend for our continuous income inequality fill data
+addLegend(position="bottomleft",pal=pal2,values=Ineq_counties_SF$County.Value..,title="Times high income > low income",opacity=1) #New pal2 used for our fill variable "County.Value.."
+```
+##Leaflet extra tools
+
+Lastly, we'll show some of the many extra tools that you can add to your maps if you'd like
+
+
+Having multiple basemaps you can switch between. Use menu on the top right corner
+
+```{r, echo=TRUE}
+leaflet() %>%
+addPolygons(data = Ineq_counties_SF, color = "red",weight = 1, opacity = 1,fillOpacity=0, label=~Name,group="MI Counties")%>%
+addTiles() %>% #Open StreetMap - default
+addProviderTiles(providers$CartoDB.Positron, group = "CartoDB Positron") %>%
+addProviderTiles(providers$Esri.WorldImagery, group = "Esri World Imagery") %>%
+addProviderTiles(providers$NASAGIBS.ViirsEarthAtNight2012, group = "NASA Viirs") %>% 
+addLayersControl(baseGroups = c("Open StreetMap", "CartoDB Positron","Esri World Imagery","NASA Viirs"), overlayGroups = c("MI Counties"),position = "topright")
+```
+
+Add web image custom markers
+
+```{r, echo=TRUE}
+leaflet() %>%
+addPolygons(data = Ineq_counties_SF, color = "red",weight = 1, opacity = 1,fillOpacity=0, label=~Name,group="MI Counties")%>%
+addTiles() %>%
+
+#Add web images custom markers
+addMarkers(data=data.frame(lng = c(-82.77, -82.48), lat = c(44.97, 44.27)),icon=icons(iconUrl=c("https://png.pngtree.com/png-vector/20220730/ourmid/pngtree-black-vector-boat-icon-set-of-superior-quality-vector-png-image_45242950.jpg","https://png.pngtree.com/png-clipart/20190705/original/pngtree-simple-boat-icon-png-image_4368327.jpg"),iconWidth = c(30, 30), iconHeight = c(30, 30)),label=c("This is a boat", "This is another boat"))
+```
+Add a measuring tool
+
+```{r, echo=TRUE}
+leaflet() %>%
+addPolygons(data = Ineq_counties_SF, color = "red",weight = 1, opacity = 1,fillOpacity=0, label=~Name,group="MI Counties")%>%
+addTiles() %>%
+
+addMeasure(
+position = "bottomleft",
+primaryLengthUnit = "meters",
+primaryAreaUnit = "sqmeters",
+activeColor = "#3D535D",
+completedColor = "#7D4479")
+```
+Add a mini map
+
+```{r, echo=TRUE}
+leaflet() %>%
+addPolygons(data = Ineq_counties_SF, color = "red",weight = 1, opacity = 1,fillOpacity=0, label=~Name,group="MI Counties")%>%
+addTiles() %>%
+
+addMiniMap(width = 150, height = 150)
+```
+
+#mapview - Interactive
+
+The `mapview` package is a quick way of creating interactive maps. It's good at automatically rendering correct map types, depending on the type of data being plotted (points, lines, polygons, etc.). It also enables viewing of much larger data sets than is possible with `leaflet`.
+
+Notice that `mapview` uses `leaflet` as the default rendering platform for maps. The map already includes a menu on the upper left corner with various base maps, a scale in the bottom and zoom control buttons.
+
+The `mapview()` function is used to generate the maps.
+
+```{r, echo=TRUE}
+library(mapview)
+
+mapview()
+```
+
+##Adding data
+
+In this example we'll be using **polygon** Michigan county data in a *Shapefile* format from [Michigan GIS Open Data](https://gis-michigan.opendata.arcgis.com/datasets/8fc9c089c11a4913b0768381fa07bf6d_0/explore?location=44.675559%2C-86.310775%2C6.46), **point** Substance use Disorder Facilities data also from [Michigan GIS Open Data](https://gis-michigan.opendata.arcgis.com/datasets/da8c64b11d1c410b9f975fb5c6d09e5a_7/explore?location=44.568325%2C-86.311000%2C6.61), and **fill** percent of individuals with no high school diploma per MI county data from the Michigan Substance Use Vulnerability Index. For the Michigan Substance Use Vulnerability Index data we'll use the [`misuvi`](https://brendensm.r-universe.dev/misuvi) package developed by Brenden Smith.
+
+All our data will be read as **sf** objects:
+
+- **sf**: (simple features) objects keep a geometry column with coordinates and specifying the 'type' of geometry for every row, given that every row has the potential to be a different geometry (polygon, point, lines, etc.)
+
+```{r, echo=TRUE}
+#Michigan Substance Use Vulnerability Index data
+Sub_Use = read.csv("data/Substance_Use_Disorder_Care.csv") #Points
+SF_Sub_Use = st_as_sf(Sub_Use,coords=c('X','Y'),crs="NAD83") #Covert df to an sf object
+
+#Michigan counties data - Shapefile read in as a sf
+shp_counties <- st_read("data/county_shapefile/County.shp")
+
+#Download MI-SUVI data: Michigan Substance Use Vulnerability Index
+# install.packages("misuvi", repos = c('https://brendensm.r-universe.dev', 'https://cloud.r-project.org'))
+#Download MI-SUVI data: Michigan Substance Use Vulnerability Index
+MI_SUVI = misuvi_load(geography = "county", type = "metrics", moe = "FALSE")
+
+#Creating sf data frame with fill data
+  No_HS_SF = shp_counties %>% 
+    left_join(MI_SUVI, by=c("Name"="county")) %>% 
+    select(c(Name,no_hs))
+  
+head(No_HS_SF)
+```
+
+Intended as a quick and easy way to visualize or map data, the `mapview()` function takes many parameters that are enough to create and style a map. One line using the `mapview()` function is enough to generate a map. New data layers can be added through lists within the function or by simply adding another `mapview()` function with `+`. The data set is the first argument for the function.
+
+Note:
+
+- **zcol** will color our polygons (MI counties), based on the value of the specified variable (percent of individuals with no high school degree, no_hs)
+
+- **col.regions** specifies the color for coloring areas/fills. **hcl.colors** specifies the number of colors and the color palette being used. Available options can be called with **hcl.pals()** and seen [here](https://sjspielman.github.io/introverse/articles/color_fill_scales.html1).
+
+- **color** specifies the color for outlines and lines
+
+- **layer.name** Name of the layer that will appear on the legend and top left layers menu
+
+- **alpha** opacity (between 0 and 1) of outlines and lines (we make our points have no stroke/outline)
+
+- **alpha.regions** opacity of areas/fill
+
+- **cex** circle size for point data. Can be based on data variables too
+
+- **label** labels to be shown on hover. Here we want *no_hs* value to show for counties and *Name* of facility for the points
+
+Information on additional `mapview()` arguments [here](https://r-spatial.github.io/mapview/articles/mapview_02-advanced.html)
+
+```{r, echo=TRUE}
+mapview(list(No_HS_SF,No_HS_SF),zcol=list("no_hs",NULL),col.regions=list(hcl.colors(9, "YlGnBu"),"red"),alpha=list(0,1),
+        layer.name=list("% No HS diploma","Counties"),color=list("red","red"),
+        alpha.regions=list(.8,0),label=list(NULL,"no_hs"))+ #no_hs fill data layer and legend
+mapview(SF_Sub_Use,label="Name",col.regions="blue",alpha=0,alpha.regions=1,layer.name="Substance Use Disorder Facilities",cex=3) #Points Substance Use Disorder data
+
+#Note: Here we are plotting the "No_HS_SF" data set twice within the same "mapview()" function by using "list()" (once for our fill data and another for our counties outline data). This is done so two legends are made. The "SF_Sub_Use" data set is plotted using another "mapview()" function. These are the two approaches for adding data layers in mapview.
+```
+##Pop Ups
+
+Through the `leafpop` package, `mapview` lets you have pop ups when clicking a feature that can show attribute tables (`popupTable()`), graphs (`popupGraph()`), or images (`popupImage()`).
+
+You'll notice that when you click on the facility points in the map above, the pop up includes all of our variables present in the **SF_Sub_Use** data set, which can be too much information. Below we'll use `popupTable()` to specify only the **StreetAddress** variable to be shown when one clicks on a blue point.
+
+Information on the other types of popups [here](https://r-spatial.github.io/mapview/articles/mapview_04-popups.html)
+
+```{r, echo=TRUE}
+library(leafpop)
+
+mapview(list(No_HS_SF,No_HS_SF),zcol=list("no_hs",NULL),col.regions=list(hcl.colors(9, "YlGnBu"),"red"),alpha=list(0,1),
+        layer.name=list("% No HS diploma","Counties"),color=list("red","red"),
+        alpha.regions=list(.8,0),label=list(NULL,"no_hs"))+ #no_hs fill data layer and legend
+mapview(SF_Sub_Use,label="Name",col.regions="blue",alpha=0,alpha.regions=1,layer.name="Substance Use Disorder Facilities",cex=3,popup=popupTable(SF_Sub_Use,zcol="StreetAddress")) #Points Substance Use Disorder data
+```
+
+##Global parameters
+
+`mapviewOptions` can be used to set plotting parameters globally, valid as long as the session is active. `mapviewOptions()` will show all options and their current values. More information on all parameters and their possible values [here](https://r-spatial.github.io/mapview/articles/mapview_03-options.html).
+
+Below we change the position of our legend, position of our layers control panel and the color of *NA* values (to neon orange). All future maps will adopt these global parameters.
+
+```{r, echo=TRUE}
+mapviewOptions(na.color = "#FF6700",legend.pos="topleft",layers.control.pos="topright")
+
+
+mapview(list(No_HS_SF,No_HS_SF),zcol=list("no_hs",NULL),col.regions=list(hcl.colors(9, "YlGnBu"),"red"),alpha=list(0,1),
+        layer.name=list("% No HS diploma","Counties"),color=list("red","red"),
+        alpha.regions=list(.8,0),label=list(NULL,"no_hs"))+ #no_hs fill data layer and legend
+mapview(SF_Sub_Use,label="Name",col.regions="blue",alpha=0,alpha.regions=1,layer.name="Substance Use Disorder Facilities",cex=3,popup=popupTable(SF_Sub_Use,zcol="StreetAddress")) #Points Substance Use Disorder data
+```
+##leafem extra functions
+
+The package `leafem` provides extra functions that can be used with `leaflet` and `mapview`. `addLogo()` lets us add any image with a url to our map. Below we'll provide one example of how to add the MDHHS logo to our map.
+
+More information on the functions provided by `leafem` [here](https://www.rdocumentation.org/packages/leafem/versions/0.2.3)
+
+
+```{r, echo=TRUE}
+library(leafem)
+
+mapview_map = 
+  mapview(list(No_HS_SF,No_HS_SF),zcol=list("no_hs",NULL),col.regions=list(hcl.colors(9, "YlGnBu"),"red"),alpha=list(0,1),
+        layer.name=list("% No HS diploma","Counties"),color=list("red","red"),
+        alpha.regions=list(.8,0),label=list(NULL,"no_hs"))+ #no_hs fill data layer and legend
+mapview(SF_Sub_Use,label="Name",col.regions="blue",alpha=0,alpha.regions=1,layer.name="Substance Use Disorder Facilities",cex=3,popup=popupTable(SF_Sub_Use,zcol="StreetAddress")) #Points Substance Use Disorder data
+
+#Adding image
+leafem::addLogo(mapview_map, "https://www.semha.org/wp-content/uploads/2021/07/MDHHSLogo-1536x922.jpg", position="topright",offset.x = 65,offset.y = 20,width = 150,height = 100)
+
+#TIP: image size and exact position can be adjusted with "offset.x", "offset.y", width", and "height".
+
+```
+#tmap
+
+This package offers a flexible, layers based, easy approach to create geographical maps. It's similar in grammar and syntax to `ggplot2`, separating data and aesthetics.
+
+```{r, echo=TRUE}
+# install.packages("tmap")
+library(tmap)
+```
+##Adding data
+
+Now we'll look at adding different types of data. Let's say you want to add your own polygon, point, and fill data. In this example we'll be using **polygon** Michigan county data in a *Shapefile* format from [Michigan GIS Open Data](https://gis-michigan.opendata.arcgis.com/datasets/8fc9c089c11a4913b0768381fa07bf6d_0/explore?location=44.675559%2C-86.310775%2C6.46), **point** Substance use Disorder Facilities data also from [Michigan GIS Open Data](https://gis-michigan.opendata.arcgis.com/datasets/da8c64b11d1c410b9f975fb5c6d09e5a_7/explore?location=44.568325%2C-86.311000%2C6.61), and **fill** income inequality data from [County Health Ranking and Roadmaps](https://www.countyhealthrankings.org/health-data/michigan?year=2025&measure=Income+Inequality&tab=1).
+
+All our data will be read as **sf** objects:
+
+- **sf**: (simple features) objects keep a geometry column with coordinates and specifying the 'type' of geometry for every row, given that every row has the potential to be a different geometry (polygon, point, lines, etc.)
+
+```{r, echo=TRUE}
+Sub_Use = read.csv("data/Substance_Use_Disorder_Care.csv") #Our points data
+SF_Sub_Use = st_as_sf(Sub_Use,coords=c('X','Y')) #Covert df to an sf object
+
+#Michigan counties data - Shapefile read in as a sf
+shp_counties <- st_read("data/county_shapefile/County.shp")
+
+#Income Inequality Data
+Income_Ineq = read.csv("data/michigan-2025-income-inequality-place-sort.csv")
+Income_Ineq = Income_Ineq[-1,] #Removing first row corresponding to state wide data since we are interested in county data only
+
+#Joining fill income inequality data with .shp MI county polygon data
+Ineq_counties_SF = shp_counties %>% 
+left_join(Income_Ineq, by=c("Name"="County"))
+Ineq_counties_SF <- st_transform(Ineq_counties_SF, crs = '+proj=longlat +datum=WGS84')
+
+head(Ineq_counties_SF)
+```
+
+To start `tm_shape()` is passed a data set. Then another function is passed to indicate how the data will be displayed. As examples for a polygon object, data can be displayed all filled with `tm_fill()`, just the outlines with `tm_borders()` and as polygons with fill and outlines with `tm_polygons()`. A data set with a geometry of dots can be displayed with `tm_dots()` or `tm_symbols()` and so on.
+
+```{r, echo=TRUE}
+poly = tm_shape(Ineq_counties_SF) +
+  tm_polygons()
+fill = tm_shape(Ineq_counties_SF) +
+  tm_fill()
+outline = tm_shape(Ineq_counties_SF) +
+  tm_borders()
+
+#Plotting all three maps side by side
+#Maps are saved as "tmap" objects
+tmap_arrange(poly,fill,outline)
+```
+So again we pass `tm_shape()` for each data set we want to display, followed by a function to add a map layer. Below we'll use `tm_polygons()` to display two map layers: 1.) Michigan income inequality fill data and 2.) Michigan county outlines with no fill. 3.) A third point map layer of Substance Use Disorder Facilities is displayed with `tm_symbols()`.
+
+Note that `tm_polygons()` ([available parameters](https://r-tmap.github.io/tmap/reference/tm_polygons.html)) and `tm_symbols()` ([available parameters](https://r-tmap.github.io/tmap/reference/tm_symbols.html)) take several parameters that determine how the data objects of that layer will be drawn. 
+
+- `fill=` can be passed a variable from your data set to specify that the object will be filled by that continuous, discrete or other variable. If this is done, a legend will be created for that variable. A constant parameter can also be passed, determining the fill color of the object. No legend will be created in this case.
+
+- `fill.scale=` **fill.** parameters modify aesthetics pertaining to how the fill data will be displayed. This can be modifications to the legend or color, for example. In the example below `tm_scale_continuous()` is used to indicate the palette by which to color the fill variable. Depending on the type of data, different `tm_scale()` [functions](https://r-tmap.github.io/tmap/reference/tm_scale.html) exist.
+
+- `col=` determines the border color. Just like `fill=`, it can be passed a data variable to create a legend or a constant color value.
+
+- `col.scale=`Same as **fill.scale=**, but for `col`
+
+
+```{r, echo=TRUE}
+tm_shape(Ineq_counties_SF) +
+  tm_polygons(
+    fill="County.Value..", #fill colored by the "County.Value.." variable
+    fill.scale = tm_scale_continuous(values = "zissou1"), #passing a palette to fill counties
+    col="green")+ #fixed green color for county outlines. Seen in the legend since the map layer below of red county outlines covers it
+  tm_shape(Ineq_counties_SF) +
+tm_polygons(
+  fill_alpha=0, #sets the transparency of the fill for this polygon
+  col="Type", #outline colored by the "Type" variable
+  col.scale= tm_scale_categorical(values="red"))+ #passing a red color for all our county outlines
+tm_shape(SF_Sub_Use)+
+  tm_symbols(
+    fill="FacilityType", #fill colored by the "FacilityType" variable
+    fill.scale= tm_scale_categorical(values="blue"), #passing a blue color to fill all our points
+    col="orange") #fixed orange color for the outline of our points
+
+#TIP: palette options can be found running this command: cols4all::c4a_gui(). This will launch a really cool shiny app, showcasing many color palette options.
+```
+Now we will further customize our map by modifying the legends, points, removing frames, and adding a scale bar, compass, and credits.
+
+Note:
+
+- `tm_legend()` takes several [parameters](https://r-tmap.github.io/tmap/reference/tm_legend.html) that lets you modify specified legends
+
+```{r, echo=TRUE}
+t_fill_map = tm_shape(Ineq_counties_SF) +
+  tm_polygons(
+    fill="County.Value..",
+    fill.scale = tm_scale_continuous(values = "zissou1"),
+    fill.legend = tm_legend("Times high income > low income",frame=FALSE,title.padding = c(-1.2,0,0,0),title.size=.8), #used to modify fill legend. Given name, removed frame, size and padding of title
+    col_alpha=0)+ #outline of counties removed
+tm_shape(Ineq_counties_SF) +
+tm_polygons(
+  fill_alpha=0,
+  col="Type",
+  col.scale= tm_scale_categorical(values="red"),
+  col.legend=tm_legend(""))+ #Modifying col legend. Removed title
+tm_shape(SF_Sub_Use)+
+  tm_symbols(
+    fill="FacilityType",
+    fill.scale= tm_scale_categorical(values="blue"),
+    fill.legend = tm_legend(""), #Modifying fill points legend. Removed title
+    col_alpha=0, #Removed outline of points
+    size=.3, #Changed size of points
+    shape=21)+ #can choose different shapes for your points
+tm_compass(position=c("left","center"))+
+tm_scalebar(position=c("left","center"),width=8)+
+tm_credits("©Data:County Health Ranking and Roadmaps",size=.5,position=c("Bottom","Left"))+
+tm_layout(frame=FALSE) #removes the frame of the map
+
+
+t_fill_map
+```
+##Bubble Map
+
+Now we'll use Michigan Substance Use Vulnerability Index data we'll use the [`misuvi`](https://brendensm.r-universe.dev/misuvi) package developed by Brenden Smith to create a bubble map of Michigan drug related arrests per 100,000 and percent of individuals without a high school diploma. 
+
+```{r, echo=TRUE}
+# install.packages("misuvi", repos = c('https://brendensm.r-universe.dev', 'https://cloud.r-project.org'))
+library(misuvi)
+
+#Download MI-SUVI data: Michigan Substance Use Vulnerability Index
+MI_SUVI = misuvi_load(geography = "county", type = "metrics", moe = "FALSE")
+
+#Creating sf data frame with fill data
+  MI_SUVI_Bubble = shp_counties %>% 
+    left_join(MI_SUVI, by=c("Name"="county")) %>% 
+    select(c(Name,no_hs,drug_arrest))
+
+head(MI_SUVI_Bubble)
+```
+Our code for the bubble map below will be very similar to the income inequality map we created above. 
+
+Notice that we only have one data layer mapped through `tm_symbols()`. However, this data layer has both `fill` and `size` parameters. This makes it so that two legends, one for each parameter, are created. It also makes it so that both `size` and `fill` aesthetics affect each other. `fill` (percent of individuals without a high school degree) is displayed as circles, varying in size according to the `size` parameter (number of drug related arrests). And the different sized drug related arrests are also colored according to the percent of individuals without a high school degree.
+
+`tm_scale_intervals()` is also used instead of `tm_scale_continuous()` to make our fill scale show in circle shaped intervals.
+
+```{r, echo=TRUE}
+t_bubble_map = tm_shape(MI_SUVI_Bubble) +
+  tm_symbols(
+    fill="no_hs",
+    fill.scale = tm_scale_intervals(n=10,values = "-tol.rainbow_wh_br"), #n specifies the preferred number of bins
+    fill.legend = tm_legend("% No High School Diploma",title.size=.75,frame=FALSE),
+    size="drug_arrest",
+    size.scale = tm_scale_continuous(values.scale = 1.5), #size/scale of drug related arrests
+    size.legend=tm_legend("Drug related arrests per 100,000",title.size=.8,frame=FALSE))+
+tm_compass(position=c("left","center")) +
+tm_scalebar(position=c("left","center"),width=10) +
+tm_credits("©Michigan Substance Use Vulnerability Index",size=.5,position=c("Bottom","Left"))+
+tm_layout(frame=FALSE)
+
+t_bubble_map
+
+#TIP: color palettes can be reversed with "-" before the name of the palette. Example above "-tol.rainbow_wh_br"
+```
+##View mode maps - Interactive
+
+In `tmap` maps can be made interactive by simple running the function `tmap_mode("view")`. Running `tmap_mode("plot")` will remove the interactivity. Below we'll show how both the income inequality and bubble maps can be made interactive.
+
+`tm_basemap()` can also be used in interactive mode to specify base maps. `tmap_providers()` or `.tmap_providers$` will show base map available options.
+
+```{r, echo=TRUE}
+tmap_mode("view") #only change needed for interactivity
+
+t_fill_map +
+  tm_basemap("Esri.WorldShadedRelief")
+```
+
+```{r, echo=TRUE}
+t_bubble_map +
+  tm_basemap("CartoDB.DarkMatter")
+```
