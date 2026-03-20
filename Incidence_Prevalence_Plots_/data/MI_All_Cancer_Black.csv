@@ -1,0 +1,47 @@
+
+"Incidence, Michigan, All Cancer Sites, White Non-Hispanic, All Ages, Both Sexes"
+
+Section 1 - Line Segments:
+Period,Annual Percent Change (1),Lower 95% Confidence Interval,Upper 95% Confidence Interval,Recent Trend
+2002-2022,-0.7,-0.9,-0.6,falling
+
+Section 2 - Yearly Points:
+Year,Observed,Estimated
+2002,520.1,519.0
+2003,514.3,515.2
+2004,502.7,511.4
+2005,504.0,507.6
+2006,503.8,503.9
+2007,517.1,500.2
+2008,506.5,496.5
+2009,493.4,492.8
+2010,493.3,489.2
+2011,494.6,485.6
+2012,470.6,482.0
+2013,459.3,478.5
+2014,456.8,475.0
+2015,471.6,471.5
+2016,477.5,468.0
+2017,463.8,464.5
+2018,464.2,461.1
+2019,462.2,457.7
+2020,424.8,454.4
+2021,450.3,451.0
+2022,450.6,447.7
+
+
+Notes:
+
+Created by statecancerprofiles.cancer.gov on 02/24/2026 5:57 pm.
+
+"Source: Incidence data provided by the SEER Program [ https://seer.cancer.gov ] and the National Program of Cancer Registries [ https://www.cdc.gov/cancer/npcr/index.htm ] SEER*Stat Database United States Department of Health and Human Services, Centers for Disease Control and Prevention. Rates calculated by the National Cancer Institute using SEER*Stat [ https://seer.cancer.gov/seerstat/ ]. Rates are age-adjusted to the 2000 US standard population [ https://seer.cancer.gov/stdpopulations/ ] (SEER areas use 20 age groups and NPCR areas use 19 age groups). Rates are for invasive cancer only (except for bladder cancer which is invasive and in situ) or unless otherwise specified. Population counts for denominators are based on Census populations as modified by NCI. The US populations included with the data release have been adjusted for the population shifts due to hurricanes Katrina and Rita [ https://seer.cancer.gov/data/hurricane.html ] for 62 counties and parishes in Alabama, Mississippi, Louisiana, and Texas. The US Population Data [ https://seer.cancer.gov/popdata/ ] File is used with SEER data. Rates and trends in this graph are computed using the same standard for malignancy. For more information see malignant.html [ https://statecancerprofiles.cancer.gov/malignant.html ]."
+
+"The 2020 incidence rate is displayed but not used in the fit of the trend line(s). Impact of COVID on SEER Cancer Incidence 2020 data [ https://seer.cancer.gov/data/covid-impact.html ]."
+
+"(1) The APC is the Annual Percent Change over the time interval.  Rates used in the calculation of the APC are age-adjusted to the 2000 U.S. standard population [ https://seer.cancer.gov/stdpopulations/ ] (mortality data and incidence data for SEER areas use 20 age groups while incidence data for NPCR areas use 19 age groups)."
+
+"For Hispanic incidence data, NHIA (NAACCR Hispanic Identification Algorithm) was used for Hispanic Ethnicity (see Technical Notes section of the USCS [ https://www.cdc.gov/cancer/uscs/technical_notes/stat_methods/suppression.htm ] )."
+
+"Statistics for minorities may be affected by inconsistent race identification between the cancer case reports (sources for numerator of rate) and data from the Census Bureau (source for denominator of rate); and from undercounts of some population groups in the census."
+
+"Due to data availability issues, the time period used in the calculation of the joinpoint regression model may differ [ https://statecancerprofiles.cancer.gov/historicaltrend/differences.html ] for selected racial groups or counties."

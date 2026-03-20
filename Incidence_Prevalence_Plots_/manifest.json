@@ -3461,10 +3461,10 @@
       "checksum": "a66cd86621278456558b2bfa2bc62f8e"
     },
     "Incid_Prev_Plots.html": {
-      "checksum": "4c4b47efa82cbf9a0fa260900dfc4879"
+      "checksum": "2e65069561809056513854306c9de1cb"
     },
     "Incid_Prev_Plots.Rmd": {
-      "checksum": "3c06d3c98ef5be7e046073219011275b"
+      "checksum": "8ada152e22d510fd1897b5857f74888a"
     },
     "Incid_Prev_Plots_files/figure-gfm/unnamed-chunk-11-1.png": {
       "checksum": "a8c2be8697f749c47e2bbea5f8d57b26"
@@ -3519,9 +3519,6 @@
     },
     "Incid_Prev_Plots_files/figure-gfm/unnamed-chunk-9-1.png": {
       "checksum": "24c160b5eb7185a89dbee3e607a5a03d"
-    },
-    "Incid_Prev_Plots_Git.md": {
-      "checksum": "5abdd55ca4515f8bfcb4d5bd77ec3e64"
     }
   },
   "users": null

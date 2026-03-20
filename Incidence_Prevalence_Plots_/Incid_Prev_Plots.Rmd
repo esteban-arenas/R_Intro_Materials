@@ -17,9 +17,9 @@ We mainly focus on the `incidence` and `ggplot2` packages, showing how to calcul
 
 ## Incidence package 
 
-We'll start by loading the **Ebola outbreak in Sierra Leone, 2014** data set from the `outbreaks` package. `data(package = "outbreaks")` will show all data sets included in the outbreaks package.
+The `incidence` package is designed to compute, handle, visualize, and model epidemic incidence. The package calculates incidence by desired time period and creates incidence objects that can be easily graphed with its `plot()` function and graphs can be further customized by adding ggplot code.
 
-Then we will use the `incidence` package....Say something about the incidence package
+We'll start by loading the **Ebola outbreak in Sierra Leone, 2014** data set from the `outbreaks` package. `data(package = "outbreaks")` will show all data sets included in the outbreaks package.
 
 ```{r, echo=TRUE}
 library(incidence)
